@@ -1,75 +1,87 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { getStation, createBooking } from "@/lib/db"
-import { getCurrentUser } from "@/lib/auth"
+import { useRouter, useParams } from "next/navigation"
+import { getStationWithCounts, getStationChargers, createBooking } from "@/lib/firestore"
+import { getCurrentUser, isAuthReady } from "@/lib/auth-firebase"
 import type { Station } from "@/lib/types"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { ArrowLeft, Calendar, Clock } from "lucide-react"
+import { Calendar, Clock } from "lucide-react"
 import Link from "next/link"
+import { SiteHeader } from "@/components/site-header"
 
-export default function BookStation({ params }: { params: { id: string } }) {
+export default function BookStation() {
   const router = useRouter()
+  const params = useParams()
+  const stationId = params?.id as string
+
   const [station, setStation] = useState<Station | null>(null)
   const [selectedDate, setSelectedDate] = useState("")
   const [selectedTime, setSelectedTime] = useState("")
   const [duration, setDuration] = useState("1")
   const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState("")
 
   useEffect(() => {
+    if (!isAuthReady()) return
     const user = getCurrentUser()
     if (!user) {
       router.push("/login")
       return
     }
-
-    const stationData = getStation(params.id)
-    setStation(stationData)
-    setLoading(false)
-
-    // Set default date to today
-    const today = new Date().toISOString().split("T")[0]
-    setSelectedDate(today)
-
-    // Set default time to next hour
-    const now = new Date()
-    now.setHours(now.getHours() + 1, 0, 0, 0)
-    const hours = now.getHours().toString().padStart(2, "0")
-    const minutes = now.getMinutes().toString().padStart(2, "0")
-    setSelectedTime(`${hours}:${minutes}`)
-  }, [params.id, router])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!station) return
-
-    const user = getCurrentUser()
-    if (!user) {
-      router.push("/login")
-      return
-    }
-
-    const startTime = new Date(`${selectedDate}T${selectedTime}:00`)
-    const endTime = new Date(startTime.getTime() + Number.parseInt(duration) * 60 * 60 * 1000)
-
-    const booking = createBooking({
-      user_id: user.id,
-      station_id: station.id,
-      charger_id: "charger-1", // In a real app, this would be selected
-      start_time: startTime.toISOString(),
-      end_time: endTime.toISOString(),
-      status: "pending",
-      payment_status: "pending",
+    if (!stationId) return
+    getStationWithCounts(stationId).then((data) => {
+      setStation(data ?? null)
+      setLoading(false)
+      const today = new Date().toISOString().split("T")[0]
+      setSelectedDate(today)
+      const now = new Date()
+      now.setHours(now.getHours() + 1, 0, 0, 0)
+      setSelectedTime(`${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`)
     })
+  }, [stationId, router])
 
-    router.push(`/bookings/${booking.id}/payment`)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!station) return
+    const user = getCurrentUser()
+    if (!user) {
+      router.push("/login")
+      return
+    }
+    setError("")
+    setSubmitting(true)
+    try {
+      const chargers = await getStationChargers(station.id)
+      const available = chargers.find((c) => c.status === "available")
+      const chargerId = available?.id ?? chargers[0]?.id
+      if (!chargerId) {
+        setError("Nenhum carregador disponível nesta estação.")
+        setSubmitting(false)
+        return
+      }
+      const startTime = new Date(`${selectedDate}T${selectedTime}:00`)
+      const endTime = new Date(startTime.getTime() + Number.parseInt(duration) * 60 * 60 * 1000)
+      const booking = await createBooking({
+        user_id: user.id,
+        station_id: station.id,
+        charger_id: chargerId,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        status: "pending",
+        payment_status: "pending",
+      })
+      router.push(`/bookings/${booking.id}/payment`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao criar reserva.")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (loading) {
@@ -99,19 +111,9 @@ export default function BookStation({ params }: { params: { id: string } }) {
   const estimatedCost = Number.parseInt(duration) * 40 * station.price_per_kwh
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <Link href={`/stations/${station.id}`}>
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
-            </Button>
-          </Link>
-        </div>
-      </header>
-
-      <main className="container mx-auto max-w-2xl px-4 py-8">
+    <div className="flex min-h-screen flex-col bg-background">
+      <SiteHeader variant="back" backHref={`/stations/${station.id}`} />
+      <main className="flex-1 container mx-auto max-w-2xl px-4 py-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Fazer Reserva</h1>
           <p className="text-muted-foreground mt-1">{station.name}</p>
@@ -130,12 +132,12 @@ export default function BookStation({ params }: { params: { id: string } }) {
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Carregadores Disponíveis</span>
                 <span className="font-medium">
-                  {station.available_chargers}/{station.total_chargers}
+                  {station.available_chargers ?? 0}/{station.total_chargers ?? 0}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Potência</span>
-                <span className="font-medium">{station.power_output}</span>
+                <span className="font-medium">{station.power_output ?? "—"}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Preço</span>
@@ -151,6 +153,9 @@ export default function BookStation({ params }: { params: { id: string } }) {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
+                {error && (
+                  <p className="text-sm text-destructive">{error}</p>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="date" className="flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
@@ -217,8 +222,8 @@ export default function BookStation({ params }: { params: { id: string } }) {
                 </div>
 
                 <div className="flex gap-2 pt-4">
-                  <Button type="submit" className="flex-1">
-                    Continuar para Pagamento
+                  <Button type="submit" className="flex-1" disabled={submitting}>
+                    {submitting ? "Reservando..." : "Continuar para Pagamento"}
                   </Button>
                   <Link href={`/stations/${station.id}`} className="flex-1">
                     <Button type="button" variant="outline" className="w-full bg-transparent">

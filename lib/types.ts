@@ -7,41 +7,47 @@ export interface User {
   role: UserRole
   phone?: string
   created_at: string
+  updated_at?: string
 }
 
 /* =========================
-   STATION
+   STATION (Firestore-aligned)
+   total_chargers / available_chargers podem ser derivados da coleção chargers
 ========================= */
 export interface Station {
   id: string
   name: string
 
-  // 📍 Localização
+  // Localização
   address: string
   city: string
   state: string
   latitude: number
   longitude: number
 
-  // ⚡ Infraestrutura
-  total_chargers: number
-  available_chargers: number
-  power_output: string
-  connector_types: string[]
-  amenities: string[]
-
-  // 💰 Operação
+  // Operação
   price_per_kwh: number
   status: "active" | "maintenance" | "inactive"
-
-  // 🔐 Gestão
   owner_id: string
   created_at: string
   updated_at: string
+
+  // Opcionais (plan)
+  opening_hours?: { start: string; end: string }
+  timezone?: string
+  amenities?: string[]
+  image_urls?: string[]
+
+  // Derivados no cliente quando necessário (compatibilidade com código que usa)
+  total_chargers?: number
+  available_chargers?: number
+  power_output?: string
+  connector_types?: string[]
 }
 
 /* =========================
-   CHARGER
+   CHARGER (Firestore-aligned)
+   price_per_kwh opcional: se omitido, usa o da estação
 ========================= */
 export interface Charger {
   id: string
@@ -51,6 +57,8 @@ export interface Charger {
   connector_type: string
   power_output: string
   current_session_id?: string
+  price_per_kwh?: number
+  model?: string
 }
 
 /* =========================
@@ -73,7 +81,7 @@ export interface Booking {
 }
 
 /* =========================
-   CHARGING SESSION
+   CHARGING SESSION (sessão real de recarga)
 ========================= */
 export interface ChargingSession {
   id: string
@@ -99,4 +107,5 @@ export interface Payment {
   status: "pending" | "completed" | "failed"
   payment_method: string
   created_at: string
+  refund_of_id?: string
 }

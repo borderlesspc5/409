@@ -1,12 +1,23 @@
 "use client"
 
 import { useEffect } from "react"
-import { initializeDatabase } from "@/lib/db"
+import { initAuthStateListener } from "@/lib/auth-firebase"
+import { ThemeProvider } from "@/components/theme-provider"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    initializeDatabase()
+    const unsubscribe = initAuthStateListener()
+    return () => unsubscribe()
   }, [])
 
-  return <>{children}</>
+  return (
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      storageKey="evcharge-theme"
+    >
+      {children}
+    </ThemeProvider>
+  )
 }

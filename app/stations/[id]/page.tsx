@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { getStationById } from "@/lib/db"
+import { getStationWithCounts } from "@/lib/firestore"
 import type { Station } from "@/lib/types"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, MapPin, Zap, DollarSign, Clock } from "lucide-react"
+import { MapPin, Zap, DollarSign, Clock } from "lucide-react"
 import Link from "next/link"
+import { SiteHeader } from "@/components/site-header"
 
 export default function StationDetailsPage() {
   const router = useRouter()
@@ -21,11 +22,10 @@ export default function StationDetailsPage() {
 
   useEffect(() => {
     if (!stationId) return
-
-    const data = getStationById(stationId)
-
-    setStation(data ?? null)
-    setLoading(false)
+    getStationWithCounts(stationId).then((data) => {
+      setStation(data ?? null)
+      setLoading(false)
+    })
   }, [stationId])
 
   if (loading) {
@@ -53,17 +53,9 @@ export default function StationDetailsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-          </Button>
-        </div>
-      </header>
-
-      <main className="container mx-auto max-w-4xl px-4 py-8">
+    <div className="flex min-h-screen flex-col bg-background">
+      <SiteHeader variant="back" />
+      <main className="flex-1 container mx-auto max-w-4xl px-4 py-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">{station.name}</h1>
           <p className="flex items-center gap-2 text-muted-foreground mt-2">
@@ -76,7 +68,7 @@ export default function StationDetailsPage() {
           <InfoCard
             icon={<Zap className="h-4 w-4 text-primary" />}
             title="Carregadores"
-            value={`${station.available_chargers}/${station.total_chargers}`}
+            value={`${station.available_chargers ?? 0}/${station.total_chargers ?? 0}`}
             subtitle="disponíveis agora"
           />
 
@@ -90,7 +82,7 @@ export default function StationDetailsPage() {
           <InfoCard
             icon={<Clock className="h-4 w-4" />}
             title="Potência"
-            value={station.power_output}
+            value={station.power_output ?? "—"}
             subtitle="de saída"
           />
         </div>
@@ -102,7 +94,7 @@ export default function StationDetailsPage() {
               <CardDescription>Disponíveis nesta estação</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {station.connector_types.map((type) => (
+              {(station.connector_types ?? []).map((type) => (
                 <Badge key={type} variant="secondary">
                   {type}
                 </Badge>
@@ -116,7 +108,7 @@ export default function StationDetailsPage() {
               <CardDescription>Serviços disponíveis</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {station.amenities.map((amenity) => (
+              {(station.amenities ?? []).map((amenity) => (
                 <Badge key={amenity} variant="outline">
                   {amenity}
                 </Badge>
@@ -132,8 +124,8 @@ export default function StationDetailsPage() {
           </CardHeader>
           <CardContent>
             <Link href={`/stations/${station.id}/book`}>
-              <Button className="w-full" size="lg" disabled={station.available_chargers === 0}>
-                {station.available_chargers > 0
+              <Button className="w-full" size="lg" disabled={(station.available_chargers ?? 0) === 0}>
+                {(station.available_chargers ?? 0) > 0
                   ? "Fazer Reserva"
                   : "Sem Carregadores Disponíveis"}
               </Button>

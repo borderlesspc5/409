@@ -52,8 +52,8 @@ export default function StationMap({
         return
       }
 
-      const color =
-        station.available_chargers > 0 ? "#22c55e" : "#ef4444"
+    const color =
+        (station.available_chargers ?? 0) > 0 ? "#22c55e" : "#ef4444"
 
       // ✅ ÍCONE SVG CONTROLADO POR CSS
       const icon = L.divIcon({
@@ -89,7 +89,7 @@ export default function StationMap({
           .bindPopup(`
             <strong>${station.name}</strong><br/>
             ${station.address}<br/>
-            <b>${station.available_chargers}/${station.total_chargers}</b> disponíveis<br/>
+            <b>${station.available_chargers ?? 0}/${station.total_chargers ?? 0}</b> disponíveis<br/>
             R$ ${station.price_per_kwh.toFixed(2)}/kWh
           `)
           .openPopup()

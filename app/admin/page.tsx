@@ -1,9 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { getCurrentUser } from "@/lib/auth"
-import { getStations, getBookings } from "@/lib/db"
+import { getStationsWithCounts, getBookings } from "@/lib/firestore"
 import type { Station, Booking } from "@/lib/types"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -13,28 +11,21 @@ import { Plus, Zap, MapPin, Clock, DollarSign } from "lucide-react"
 import Link from "next/link"
 
 export default function AdminDashboard() {
-  const router = useRouter()
   const [stations, setStations] = useState<Station[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const user = getCurrentUser()
-
-    // ✅ Proteção correta da rota admin
-    if (!user || user.role !== "admin") {
-      router.push("/login")
-      return
-    }
-
-    setStations(getStations())
-    setBookings(getBookings())
-    setLoading(false)
-  }, [router])
+    Promise.all([getStationsWithCounts(), getBookings()]).then(([s, b]) => {
+      setStations(s)
+      setBookings(b)
+      setLoading(false)
+    })
+  }, [])
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex items-center justify-center py-12">
         <div className="text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent" />
           <p className="mt-4 text-muted-foreground">Carregando...</p>
@@ -43,8 +34,8 @@ export default function AdminDashboard() {
     )
   }
 
-  const totalChargers = stations.reduce((sum, s) => sum + s.total_chargers, 0)
-  const availableChargers = stations.reduce((sum, s) => sum + s.available_chargers, 0)
+  const totalChargers = stations.reduce((sum, s) => sum + (s.total_chargers ?? 0), 0)
+  const availableChargers = stations.reduce((sum, s) => sum + (s.available_chargers ?? 0), 0)
 
   // ✅ Bug escondido corrigido (divisão por zero)
   const availability =
@@ -56,31 +47,7 @@ export default function AdminDashboard() {
     .reduce((sum, b) => sum + (b.total_cost || 0), 0)
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto flex items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-2">
-            <Zap className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-semibold">EV Charge Admin</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="outline">Ver App</Button>
-            </Link>
-            <Button
-              variant="outline"
-              onClick={() => {
-                localStorage.removeItem("evcharge_current_user")
-                router.push("/login")
-              }}
-            >
-              Sair
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
+    <>
         <div className="mb-8">
           <h2 className="text-3xl font-bold">Dashboard</h2>
           <p className="text-muted-foreground">Gerencie suas estações de recarga</p>
@@ -133,7 +100,6 @@ export default function AdminDashboard() {
         </div>
 
         {/* restante do código permanece inalterado */}
-      </main>
-    </div>
+    </>
   )
 }

@@ -2,11 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
-
-import { getCurrentUser } from "@/lib/auth"
-import { getStationById } from "@/lib/db"
+import { getStationById } from "@/lib/firestore"
 import type { Station } from "@/lib/types"
-
 import StationForm from "@/components/station-form"
 
 export default function EditStationPage() {
@@ -18,28 +15,19 @@ export default function EditStationPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const user = getCurrentUser()
-
-    // 🔐 Proteção da rota admin
-    if (!user || user.role !== "admin") {
-      router.push("/login")
-      return
-    }
-
-    const data = getStationById(stationId)
-
-    if (!data) {
-      router.push("/admin/stations")
-      return
-    }
-
-    setStation(data)
-    setLoading(false)
+    getStationById(stationId).then((data) => {
+      if (!data) {
+        router.push("/admin/stations-maneger")
+        return
+      }
+      setStation(data)
+      setLoading(false)
+    })
   }, [router, stationId])
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex items-center justify-center py-12">
         <div className="text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-r-transparent" />
           <p className="mt-4 text-muted-foreground">
@@ -53,7 +41,7 @@ export default function EditStationPage() {
   if (!station) return null
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-8">
+    <div className="mx-auto max-w-3xl">
       <StationForm station={station} />
     </div>
   )

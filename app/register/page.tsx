@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { register } from "@/lib/auth"
+import { register } from "@/lib/auth-firebase"
 
 import {
   Card,
@@ -28,7 +28,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
     setLoading(true)
@@ -45,8 +45,14 @@ export default function RegisterPage() {
       return
     }
 
-    register(name, email, password)
-    router.push("/")
+    try {
+      await register(name, email, password)
+      router.push("/")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao criar conta")
+    } finally {
+      setLoading(false)
+    }
   }
 
   // ✅ DEMO

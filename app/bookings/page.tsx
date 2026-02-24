@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { getCurrentUser } from "@/lib/auth"
-import { getUserBookings, getStation } from "@/lib/db"
+import { getCurrentUser, isAuthReady } from "@/lib/auth-firebase"
+import { getUserBookings, getStation } from "@/lib/firestore"
 import type { Booking, Station } from "@/lib/types"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Calendar, MapPin, Clock, DollarSign } from "lucide-react"
+import { Calendar, MapPin, Clock, DollarSign } from "lucide-react"
 import Link from "next/link"
+import { SiteHeader } from "@/components/site-header"
 
 export default function MyBookings() {
   const router = useRouter()
@@ -18,26 +19,31 @@ export default function MyBookings() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!isAuthReady()) return
     const user = getCurrentUser()
     if (!user) {
       router.push("/login")
       return
     }
 
-    const userBookings = getUserBookings(user.id)
-    setBookings(userBookings)
-
-    // Load station data for each booking
-    const stationMap = new Map<string, Station>()
-    userBookings.forEach((booking) => {
-      const station = getStation(booking.station_id)
-      if (station) {
-        stationMap.set(booking.station_id, station)
-      }
+    let cancelled = false
+    getUserBookings(user.id).then((userBookings) => {
+      if (cancelled) return
+      setBookings(userBookings)
+      const stationMap = new Map<string, Station>()
+      Promise.all(
+        userBookings.map((b) =>
+          getStation(b.station_id).then((station) => {
+            if (station) stationMap.set(b.station_id, station)
+          })
+        )
+      ).then(() => {
+        if (!cancelled) setStations(stationMap)
+      })
+    }).finally(() => {
+      if (!cancelled) setLoading(false)
     })
-    setStations(stationMap)
-
-    setLoading(false)
+    return () => { cancelled = true }
   }, [router])
 
   if (loading) {
@@ -52,19 +58,9 @@ export default function MyBookings() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
-            </Button>
-          </Link>
-        </div>
-      </header>
-
-      <main className="container mx-auto max-w-4xl px-4 py-8">
+    <div className="flex min-h-screen flex-col bg-background">
+      <SiteHeader variant="back" backHref="/" />
+      <main className="flex-1 container mx-auto max-w-4xl px-4 py-6">
         <div className="mb-8">
           <h1 className="text-3xl font-bold">Minhas Reservas</h1>
           <p className="text-muted-foreground mt-1">Acompanhe todas as suas reservas</p>
@@ -159,7 +155,7 @@ export default function MyBookings() {
                           <span className="text-muted-foreground">Pagamento:</span>
                           <Badge
                             variant={booking.payment_status === "paid" ? "default" : "outline"}
-                            className={booking.payment_status === "paid" ? "bg-green-600 text-white" : ""}
+                            className={booking.payment_status === "paid" ? "bg-primary text-primary-foreground" : ""}
                           >
                             {booking.payment_status === "paid" && "Pago"}
                             {booking.payment_status === "pending" && "Pendente"}

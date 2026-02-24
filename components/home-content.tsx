@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { getCurrentUser } from "@/lib/auth"
-import { getStations } from "@/lib/db"
+import { getCurrentUser, isAuthReady } from "@/lib/auth-firebase"
+import { getStationsWithCounts } from "@/lib/firestore"
 import type { Station } from "@/lib/types"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Zap, MapPin, Search, User, LogOut } from "lucide-react"
+import { MapPin, Search } from "lucide-react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
+import { SiteHeader } from "@/components/site-header"
 
 const StationMap = dynamic(() => import("@/components/station-map"), {
   ssr: false,
@@ -24,20 +25,32 @@ const StationMap = dynamic(() => import("@/components/station-map"), {
 
 export default function HomeContent() {
   const router = useRouter()
-  const [user, setUser] = useState(getCurrentUser())
+  const [user, setUser] = useState<{ name: string; email: string; role?: "user" | "admin" } | null>(null)
   const [stations, setStations] = useState<Station[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStation, setSelectedStation] = useState<Station | null>(null)
   const [viewMode, setViewMode] = useState<"map" | "list">("map")
 
   useEffect(() => {
-    const currentUser = getCurrentUser()
-    if (!currentUser) {
-      router.push("/login")
-      return
+    function tryLoad() {
+      const currentUser = getCurrentUser()
+      if (!currentUser) {
+        router.push("/login")
+        return
+      }
+      setUser(currentUser)
+      getStationsWithCounts().then(setStations)
     }
-    setUser(currentUser)
-    setStations(getStations())
+    if (!isAuthReady()) {
+      const t = setInterval(() => {
+        if (isAuthReady()) {
+          clearInterval(t)
+          tryLoad()
+        }
+      }, 100)
+      return () => clearInterval(t)
+    }
+    tryLoad()
   }, [router])
 
   const filteredStations = stations.filter(
@@ -46,11 +59,6 @@ export default function HomeContent() {
       (station.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         station.address.toLowerCase().includes(searchQuery.toLowerCase())),
   )
-
-  const handleLogout = () => {
-    localStorage.removeItem("evcharge_current_user")
-    router.push("/login")
-  }
 
   if (!user) {
     return (
@@ -64,52 +72,9 @@ export default function HomeContent() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="container mx-auto flex items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-2">
-            <Zap className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-semibold">EV Charge</h1>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {user.role === "admin" && (
-              <>
-                <Link href="/admin">
-                  <Button variant="outline" size="sm">
-                    Admin
-                  </Button>
-                </Link>
-
-                <Link href="/admin/expenses">
-                  <Button variant="outline" size="sm">
-                    Financeiro
-                  </Button>
-                </Link>
-
-                <Link href="/admin/stations-maneger">
-                  <Button variant="outline" size="sm">
-                    Estações
-                  </Button>
-                </Link>
-              </>
-            )}
-
-            <Link href="/bookings">
-              <Button variant="outline" size="sm">
-                <User className="mr-2 h-4 w-4" />
-                Minhas Reservas
-              </Button>
-            </Link>
-
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-background">
+      <SiteHeader variant="home" user={user} />
+      <main className="flex-1 container mx-auto px-4 py-6">
         <div className="mb-6 space-y-2">
           <h2 className="text-3xl font-bold">Encontre Estações de Recarga</h2>
           <p className="text-muted-foreground">
@@ -182,7 +147,7 @@ export default function HomeContent() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">Disponível</span>
                         <span className="font-medium text-primary">
-                          {station.available_chargers}/{station.total_chargers}
+                          {(station.available_chargers ?? 0)}/{(station.total_chargers ?? 0)}
                         </span>
                       </div>
 
@@ -217,13 +182,13 @@ export default function HomeContent() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Carregadores</span>
                     <span className="font-medium">
-                      {station.available_chargers}/{station.total_chargers} disponíveis
+                      {(station.available_chargers ?? 0)}/{(station.total_chargers ?? 0)} disponíveis
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Potência</span>
-                    <span className="font-medium">{station.power_output}</span>
+                    <span className="font-medium">{station.power_output ?? "—"}</span>
                   </div>
 
                   <div className="flex items-center justify-between text-sm">
@@ -234,16 +199,16 @@ export default function HomeContent() {
                   </div>
 
                   <div className="flex flex-wrap gap-1">
-                    {station.connector_types.map((type) => (
+                    {(station.connector_types ?? []).map((type) => (
                       <Badge key={type} variant="outline" className="text-xs">
                         {type}
                       </Badge>
                     ))}
                   </div>
 
-                  {station.amenities.length > 0 && (
+                  {(station.amenities?.length ?? 0) > 0 && (
                     <div className="flex flex-wrap gap-1 pt-1">
-                      {station.amenities.slice(0, 3).map((amenity) => (
+                      {(station.amenities ?? []).slice(0, 3).map((amenity) => (
                         <Badge key={amenity} variant="secondary" className="text-xs">
                           {amenity}
                         </Badge>

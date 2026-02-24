@@ -1,16 +1,16 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { createStation } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth-firebase"
+import { createStation } from "@/lib/firestore"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Plus, X } from "lucide-react"
+import { Plus, X } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 
@@ -19,6 +19,8 @@ export default function NewStation() {
   const [formData, setFormData] = useState({
     name: "",
     address: "",
+    city: "",
+    state: "",
     latitude: "",
     longitude: "",
     total_chargers: "",
@@ -29,26 +31,39 @@ export default function NewStation() {
   const [amenities, setAmenities] = useState<string[]>([])
   const [newConnector, setNewConnector] = useState("")
   const [newAmenity, setNewAmenity] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const user = getCurrentUser()
+    if (!user || user.role !== "admin") {
+      router.push("/login")
+    }
+  }, [router])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    const station = createStation({
-      name: formData.name,
-      address: formData.address,
-      latitude: Number.parseFloat(formData.latitude),
-      longitude: Number.parseFloat(formData.longitude),
-      total_chargers: Number.parseInt(formData.total_chargers),
-      available_chargers: Number.parseInt(formData.total_chargers),
-      price_per_kwh: Number.parseFloat(formData.price_per_kwh),
-      power_output: formData.power_output,
-      connector_types: connectorTypes,
-      amenities: amenities,
-      status: "active",
-      owner_id: "admin-1",
-    })
-
-    router.push("/admin")
+    const user = getCurrentUser()
+    if (!user) return
+    setSubmitting(true)
+    try {
+      await createStation({
+        name: formData.name,
+        address: formData.address,
+        city: formData.city || "—",
+        state: formData.state || "—",
+        latitude: Number.parseFloat(formData.latitude) || 0,
+        longitude: Number.parseFloat(formData.longitude) || 0,
+        price_per_kwh: Number.parseFloat(formData.price_per_kwh) || 0,
+        power_output: formData.power_output,
+        connector_types: connectorTypes,
+        amenities: amenities,
+        status: "active",
+        owner_id: user.id,
+      })
+      router.push("/admin/stations-maneger")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const addConnectorType = () => {
@@ -66,19 +81,7 @@ export default function NewStation() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/admin/stations-maneger/">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
-            </Button>
-          </Link>
-        </div>
-      </header>
-
-      <main className="container mx-auto max-w-2xl px-4 py-8">
+    <div className="mx-auto max-w-2xl">
         <Card>
           <CardHeader>
             <CardTitle>Nova Estação de Recarga</CardTitle>
@@ -106,6 +109,27 @@ export default function NewStation() {
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   placeholder="Ex: Av. Example, 1234 - São Paulo, SP"
                 />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="city">Cidade</Label>
+                  <Input
+                    id="city"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    placeholder="São Paulo"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="state">Estado</Label>
+                  <Input
+                    id="state"
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    placeholder="SP"
+                  />
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -215,10 +239,10 @@ export default function NewStation() {
               </div>
 
               <div className="flex gap-2 pt-4">
-                <Button type="submit" className="flex-1">
-                  Criar Estação
+                <Button type="submit" className="flex-1" disabled={submitting}>
+                  {submitting ? "Criando..." : "Criar Estação"}
                 </Button>
-                <Link href="/admin" className="flex-1">
+                <Link href="/admin/stations-maneger" className="flex-1">
                   <Button type="button" variant="outline" className="w-full bg-transparent">
                     Cancelar
                   </Button>
@@ -227,7 +251,6 @@ export default function NewStation() {
             </form>
           </CardContent>
         </Card>
-      </main>
     </div>
   )
 }

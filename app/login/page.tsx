@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { login } from "@/lib/auth"
+import { login } from "@/lib/auth-firebase"
 
 import {
   Card,
@@ -26,17 +26,17 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
 
-    const success = login(email, password)
-
-    if (success) {
+    try {
+      await login(email, password)
       router.push("/")
-    } else {
+    } catch {
       setError("Email ou senha incorretos")
+    } finally {
       setLoading(false)
     }
   }

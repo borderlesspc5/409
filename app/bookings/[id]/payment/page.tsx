@@ -1,20 +1,23 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { getBookings, getStation, updateBooking } from "@/lib/db"
+import { useRouter, useParams } from "next/navigation"
+import { getBooking, getStation, updateBooking, createPayment } from "@/lib/firestore"
 import type { Booking, Station } from "@/lib/types"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, CreditCard, Lock, CheckCircle } from "lucide-react"
+import { CreditCard, Lock, CheckCircle } from "lucide-react"
 import Link from "next/link"
+import { SiteHeader } from "@/components/site-header"
 
-export default function PaymentPage({ params }: { params: { id: string } }) {
+export default function PaymentPage() {
   const router = useRouter()
+  const params = useParams()
+  const bookingId = params?.id as string
+
   const [booking, setBooking] = useState<Booking | null>(null)
   const [station, setStation] = useState<Station | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,14 +29,19 @@ export default function PaymentPage({ params }: { params: { id: string } }) {
   const [cardCvv, setCardCvv] = useState("")
 
   useEffect(() => {
-    const bookingData = getBookings().find((b) => b.id === params.id)
-    if (bookingData) {
-      setBooking(bookingData)
-      const stationData = getStation(bookingData.station_id)
-      setStation(stationData)
+    if (!bookingId) {
+      setLoading(false)
+      return
     }
-    setLoading(false)
-  }, [params.id])
+    getBooking(bookingId).then(async (bookingData) => {
+      if (bookingData) {
+        setBooking(bookingData)
+        const stationData = await getStation(bookingData.station_id)
+        setStation(stationData ?? null)
+      }
+      setLoading(false)
+    })
+  }, [bookingId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,32 +50,33 @@ export default function PaymentPage({ params }: { params: { id: string } }) {
 
     setProcessing(true)
 
-    // Simulate payment processing
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    try {
+      const duration = (new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / (1000 * 60 * 60)
+      const estimatedKwh = duration * 40
+      const cost = estimatedKwh * (station?.price_per_kwh ?? 0.89)
 
-    // Calculate estimated cost
-    const duration = (new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / (1000 * 60 * 60)
-    const estimatedKwh = duration * 40
-    const cost = estimatedKwh * (station?.price_per_kwh || 0.89)
+      const updatedBooking: Booking = {
+        ...booking,
+        status: "active",
+        payment_status: "paid",
+        total_kwh: estimatedKwh,
+        total_cost: cost,
+      }
 
-    // Update booking with payment information
-    const updatedBooking: Booking = {
-      ...booking,
-      status: "active",
-      payment_status: "paid",
-      total_kwh: estimatedKwh,
-      total_cost: cost,
+      await updateBooking(updatedBooking)
+      await createPayment({
+        booking_id: booking.id,
+        user_id: booking.user_id,
+        amount: cost,
+        status: "completed",
+        payment_method: "card",
+      })
+
+      setPaymentSuccess(true)
+      setTimeout(() => router.push("/bookings"), 3000)
+    } finally {
+      setProcessing(false)
     }
-
-    updateBooking(updatedBooking)
-
-    setProcessing(false)
-    setPaymentSuccess(true)
-
-    // Redirect after success
-    setTimeout(() => {
-      router.push("/bookings")
-    }, 3000)
   }
 
   if (loading) {
@@ -99,7 +108,7 @@ export default function PaymentPage({ params }: { params: { id: string } }) {
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Card className="max-w-md">
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <CheckCircle className="h-16 w-16 text-green-600 mb-4" />
+            <CheckCircle className="h-16 w-16 text-primary mb-4" />
             <h2 className="text-2xl font-bold mb-2">Pagamento Confirmado!</h2>
             <p className="text-center text-muted-foreground mb-6">
               Sua reserva foi confirmada com sucesso. Você será redirecionado em breve.
@@ -118,19 +127,9 @@ export default function PaymentPage({ params }: { params: { id: string } }) {
   const totalAmount = estimatedKwh * station.price_per_kwh
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/bookings">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
-            </Button>
-          </Link>
-        </div>
-      </header>
-
-      <main className="container mx-auto max-w-3xl px-4 py-8">
+    <div className="flex min-h-screen flex-col bg-background">
+      <SiteHeader variant="back" backHref="/bookings" />
+      <main className="flex-1 container mx-auto max-w-3xl px-4 py-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Pagamento</h1>
           <p className="text-muted-foreground mt-1">Complete o pagamento para confirmar sua reserva</p>

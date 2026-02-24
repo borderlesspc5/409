@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import type { Station } from "@/lib/types"
-import { createStation, updateStationById } from "@/lib/db"
+import { updateStationById } from "@/lib/firestore"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -45,21 +45,13 @@ export default function StationForm({ station }: StationFormProps) {
     }))
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
     if (isEdit && station) {
-      updateStationById(station.id, form)
-    } else {
-      createStation({
-        ...form,
-        connector_types: [],
-        amenities: [],
-        owner_id: "admin",
-      })
+      await updateStationById(station.id, form)
     }
-
-    router.push("/admin/stations")
+    router.push("/admin/stations-maneger")
   }
 
   return (
