@@ -50,17 +50,19 @@ export function MainSidebar() {
       </div>
 
       <nav className="flex-1 space-y-1">
-        <Button
-          asChild
-          variant={isActive("/") ? "default" : "ghost"}
-          size="sm"
-          className="w-full justify-start"
-        >
-          <Link href="/">
-            <MapPin className="mr-2 h-4 w-4" />
-            Home
-          </Link>
-        </Button>
+        {user?.role !== "admin" && (
+          <Button
+            asChild
+            variant={isActive("/") ? "default" : "ghost"}
+            size="sm"
+            className="w-full justify-start"
+          >
+            <Link href="/">
+              <MapPin className="mr-2 h-4 w-4" />
+              Home
+            </Link>
+          </Button>
+        )}
 
         {user?.role === "admin" && (
           <>
@@ -72,7 +74,7 @@ export function MainSidebar() {
             >
               <Link href="/admin">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
-                Admin
+                Home
               </Link>
             </Button>
 
@@ -126,17 +128,19 @@ export function MainSidebar() {
           </>
         )}
 
-        <Button
-          asChild
-          variant={isActive("/bookings") ? "default" : "ghost"}
-          size="sm"
-          className="w-full justify-start"
-        >
-          <Link href="/bookings">
-            <ListChecks className="mr-2 h-4 w-4" />
-            Minhas Reservas
-          </Link>
-        </Button>
+        {user?.role !== "admin" && (
+          <Button
+            asChild
+            variant={isActive("/bookings") ? "default" : "ghost"}
+            size="sm"
+            className="w-full justify-start"
+          >
+            <Link href="/bookings">
+              <ListChecks className="mr-2 h-4 w-4" />
+              Minhas Reservas
+            </Link>
+          </Button>
+        )}
       </nav>
 
       <div className="mt-4 space-y-3 border-t pt-3">

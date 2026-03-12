@@ -11,9 +11,10 @@ import {
   updateCharger,
   deleteCharger,
   getPayments,
+  getUsers,
 } from "@/lib/firestore"
 import { reauthenticateWithPassword } from "@/lib/auth-firebase"
-import type { Station, Booking, Charger, Payment } from "@/lib/types"
+import type { Station, Booking, Charger, Payment, User } from "@/lib/types"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -41,6 +42,7 @@ export default function AdminStationsPage() {
   const [stations, setStations] = useState<Station[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [selectedStation, setSelectedStation] = useState<Station | null>(null)
   const [chargers, setChargers] = useState<Charger[]>([])
   const [chargersLoading, setChargersLoading] = useState(false)
@@ -94,10 +96,11 @@ export default function AdminStationsPage() {
   })
 
   useEffect(() => {
-    Promise.all([getStationsWithCounts(), getBookings(), getPayments()]).then(([s, b, p]) => {
+    Promise.all([getStationsWithCounts(), getBookings(), getPayments(), getUsers()]).then(([s, b, p, u]) => {
       setStations(s)
       setBookings(b)
       setPayments(p)
+      setUsers(u)
       setLoading(false)
     })
   }, [])
@@ -712,6 +715,19 @@ export default function AdminStationsPage() {
                                   </Badge>
                                 </div>
                               </button>
+
+                              {c.status === "occupied" && c.current_session_id && (
+                                (() => {
+                                  const booking = bookings.find((b) => b.id === c.current_session_id)
+                                  const user = booking ? users.find((u) => u.id === booking.user_id) : null
+                                  return booking ? (
+                                    <div className="mt-2 text-sm text-muted-foreground bg-muted/50 rounded p-2">
+                                      <p><strong>Ocupado por:</strong> {user ? user.name || user.email : "Usuário desconhecido"}</p>
+                                      <p><strong>Até:</strong> {new Date(booking.end_time).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p>
+                                    </div>
+                                  ) : null
+                                })()
+                              )}
 
                               {isEditing && (
                                 <form

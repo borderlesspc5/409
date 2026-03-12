@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, UserPlus } from "lucide-react"
+import { AlertCircle, UserPlus, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 import { ThemeSwitcher } from "@/components/theme-switcher"
 
@@ -28,6 +28,8 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,20 +56,6 @@ export default function RegisterPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  // ✅ DEMO
-  const quickRegister = (type: "user" | "admin") => {
-    if (type === "user") {
-      setName("João Silva")
-      setEmail("joao@email.com")
-    } else {
-      setName("Admin Charger")
-      setEmail("admin@evcharge.com")
-    }
-
-    setPassword("password")
-    setConfirmPassword("password")
   }
 
   return (
@@ -111,20 +99,44 @@ export default function RegisterPage() {
 
               <div className="space-y-2">
                 <Label>Senha</Label>
-                <Input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                    aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label>Confirmar senha</Label>
-                <Input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <Input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                    aria-label={showConfirmPassword ? "Ocultar confirmação de senha" : "Mostrar confirmação de senha"}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
               <Button className="w-full" disabled={loading}>
@@ -138,45 +150,6 @@ export default function RegisterPage() {
                 Entrar
               </Link>
             </p>
-
-            {/* 🔽 DEMO */}
-            <div className="mt-6">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">
-                    Demo – Registro Rápido
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full bg-transparent"
-                  onClick={() => quickRegister("user")}
-                >
-                  Criar conta como Usuário
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full bg-transparent"
-                  onClick={() => quickRegister("admin")}
-                >
-                  Criar conta como Admin
-                </Button>
-              </div>
-
-              <p className="mt-4 text-center text-xs text-muted-foreground">
-                Senha padrão:{" "}
-                <span className="font-mono font-semibold">password</span>
-              </p>
-            </div>
           </CardContent>
         </Card>
       </div>

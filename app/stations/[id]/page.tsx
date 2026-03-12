@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { getStationWithCounts } from "@/lib/firestore"
+import { getCurrentUserAsync } from "@/lib/auth-firebase"
 import type { Station } from "@/lib/types"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,14 +20,35 @@ export default function StationDetailsPage() {
   const stationId = params.id as string
 
   const [station, setStation] = useState<Station | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!stationId) return
-    getStationWithCounts(stationId).then((data) => {
+
+    let cancelled = false
+
+    async function fetchStation() {
+      const [currentUser, data] = await Promise.all([
+        getCurrentUserAsync(),
+        getStationWithCounts(stationId),
+      ])
+      if (cancelled) return
+      setIsAdmin(currentUser?.role === "admin")
       setStation(data ?? null)
       setLoading(false)
-    })
+    }
+
+    // fetch inicial
+    fetchStation()
+
+    // polling leve para manter contagens mais frescas
+    const intervalId = window.setInterval(fetchStation, 20_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
   }, [stationId])
 
   if (loading) {
@@ -136,13 +158,23 @@ export default function StationDetailsPage() {
             <CardDescription className="text-sm md:text-base">Garanta seu carregador</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href={`/stations/${station.id}/book`}>
-              <Button className="w-full" size="lg" disabled={(station.available_chargers ?? 0) === 0}>
-                {(station.available_chargers ?? 0) > 0
-                  ? "Fazer Reserva"
-                  : "Sem Carregadores Disponíveis"}
-              </Button>
-            </Link>
+            {isAdmin ? (
+              <p className="text-sm text-muted-foreground">
+                Admins não podem fazer reservas. Use uma conta pessoal para reservar um horário.
+              </p>
+            ) : (
+              <Link href={`/stations/${station.id}/book`}>
+                <Button
+                  className="w-full"
+                  size="lg"
+                  disabled={(station.available_chargers ?? 0) === 0}
+                >
+                  {(station.available_chargers ?? 0) > 0
+                    ? "Fazer Reserva"
+                    : "Sem Carregadores Disponíveis"}
+                </Button>
+              </Link>
+            )}
           </CardContent>
         </Card>
       </main>

@@ -192,6 +192,7 @@ function serializeVoucher(data: DocumentData, id: string): Voucher {
     max_uses: Number(v.max_uses ?? 0),
     used_count: Number(v.used_count ?? 0),
     one_per_user: Boolean(v.one_per_user),
+    ...(typeof v.paused === "boolean" && { paused: v.paused }),
     created_at: v.created_at instanceof Timestamp ? fromFirestoreTime(v.created_at) : String(v.created_at ?? ""),
     created_by: String(v.created_by ?? ""),
     ...(v.active_from && { active_from: v.active_from instanceof Timestamp ? fromFirestoreTime(v.active_from) : String(v.active_from) }),
@@ -213,6 +214,11 @@ function serializeVoucherUsage(data: DocumentData, id: string): VoucherUsage {
 // -----------------------------
 // Users (Firebase Auth UID = document ID)
 // -----------------------------
+
+export async function getUsers(): Promise<User[]> {
+  const snap = await getDocs(collection(getDb(), COLLECTIONS.USERS))
+  return snap.docs.map((d) => serializeUser(d.data(), d.id))
+}
 
 export async function getUser(uid: string): Promise<User | null> {
   const snap = await getDoc(doc(getDb(), COLLECTIONS.USERS, uid))
@@ -754,6 +760,7 @@ export async function getVoucherByCode(code: string): Promise<Voucher | null> {
 }
 
 function isVoucherActive(v: Voucher): boolean {
+  if (v.paused) return false
   const now = Date.now()
   if (v.active_from) {
     const from = new Date(v.active_from).getTime()
@@ -819,6 +826,41 @@ export async function releaseVoucherUsage(bookingId: string): Promise<void> {
   const ref = doc(getDb(), COLLECTIONS.VOUCHERS, voucherId)
   const newCount = Math.max(0, v.used_count - 1)
   await updateDoc(ref, { used_count: newCount })
+}
+
+export async function updateVoucherById(id: string, data: Partial<Voucher>): Promise<void> {
+  const ref = doc(getDb(), COLLECTIONS.VOUCHERS, id)
+  const payload: DocumentData = {}
+
+  if (data.code !== undefined) payload.code = data.code.trim().toUpperCase()
+  if (data.name !== undefined) payload.name = data.name.trim()
+  if (data.discount_type !== undefined) payload.discount_type = data.discount_type
+  if (data.discount_value !== undefined) payload.discount_value = data.discount_value
+  if (data.max_uses !== undefined) payload.max_uses = data.max_uses
+  if (data.one_per_user !== undefined) payload.one_per_user = data.one_per_user
+  if (data.paused !== undefined) payload.paused = data.paused
+
+  if (data.active_from !== undefined) {
+    if (data.active_from) {
+      payload.active_from = toFirestoreTime(data.active_from) ?? data.active_from
+    } else {
+      payload.active_from = null
+    }
+  }
+  if (data.active_until !== undefined) {
+    if (data.active_until) {
+      payload.active_until = toFirestoreTime(data.active_until) ?? data.active_until
+    } else {
+      payload.active_until = null
+    }
+  }
+
+  await updateDoc(ref, payload)
+}
+
+export async function deleteVoucherById(id: string): Promise<void> {
+  const ref = doc(getDb(), COLLECTIONS.VOUCHERS, id)
+  await deleteDoc(ref)
 }
 
 // -----------------------------

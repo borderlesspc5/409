@@ -39,15 +39,35 @@ export default function PaymentPage() {
       setLoading(false)
       return
     }
-    getBooking(bookingId).then(async (bookingData) => {
+
+    let cancelled = false
+
+    ;(async () => {
+      const currentUser = await getCurrentUserAsync()
+      if (currentUser?.role === "admin") {
+        if (!cancelled) {
+          if (typeof window !== "undefined") {
+            window.alert("Admins não podem pagar reservas pessoais. Use uma conta de cliente.")
+          }
+          router.replace("/admin")
+        }
+        return
+      }
+
+      const bookingData = await getBooking(bookingId)
+      if (cancelled) return
       if (bookingData) {
         setBooking(bookingData)
         const stationData = await getStation(bookingData.station_id)
         setStation(stationData ?? null)
       }
       setLoading(false)
-    })
-  }, [bookingId])
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [bookingId, router])
 
   const handleApplyVoucher = async () => {
     const code = voucherCode.trim()

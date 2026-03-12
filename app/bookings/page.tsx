@@ -14,6 +14,37 @@ import { Calendar, MapPin, Clock, DollarSign } from "lucide-react"
 import Link from "next/link"
 import { MainSidebar } from "@/components/main-sidebar"
 
+function RemainingTime({ endTime }: { endTime: string }) {
+  const [timeLeft, setTimeLeft] = useState<string>("Calculando...")
+
+  useEffect(() => {
+    const update = () => {
+      const now = new Date().getTime()
+      const end = new Date(endTime).getTime()
+      const diff = end - now
+
+      if (diff <= 0) {
+        setTimeLeft("Tempo esgotado")
+        return
+      }
+
+      const minutes = Math.floor(diff / (1000 * 60))
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+      setTimeLeft(`Tempo restante: ${minutes}m ${seconds}s`)
+    }
+
+    update()
+    const interval = setInterval(update, 1000)
+    return () => clearInterval(interval)
+  }, [endTime])
+
+  return (
+    <div className="w-full inline-flex h-9 items-center justify-center rounded-md bg-secondary px-3 text-sm font-medium text-secondary-foreground shadow-sm">
+      {timeLeft}
+    </div>
+  )
+}
+
 export default function MyBookings() {
   const router = useRouter()
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -29,6 +60,19 @@ export default function MyBookings() {
       router.push("/login")
       return
     }
+
+    ;(async () => {
+      const currentUser = await getCurrentUserAsync()
+      if (currentUser?.role === "admin") {
+        if (!cancelled) {
+          if (typeof window !== "undefined") {
+            window.alert("Admins não podem gerenciar reservas pessoais. Use uma conta de cliente.")
+          }
+          router.replace("/admin")
+        }
+        return
+      }
+    })()
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (cancelled) return
@@ -257,15 +301,19 @@ export default function MyBookings() {
                           </Link>
                         )}
                         {booking.status === "active" && (
-                          <Button
-                            size="sm"
-                            className="w-full"
-                            variant="default"
-                            disabled={arrivingId === booking.id}
-                            onClick={() => handleArriveAtCharger(booking)}
-                          >
-                            {arrivingId === booking.id ? "Confirmando..." : "Cheguei ao carregador"}
-                          </Button>
+                          charger?.status === "occupied" && charger?.current_session_id === booking.id ? (
+                            <RemainingTime endTime={booking.end_time} />
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="w-full"
+                              variant="default"
+                              disabled={arrivingId === booking.id}
+                              onClick={() => handleArriveAtCharger(booking)}
+                            >
+                              {arrivingId === booking.id ? "Confirmando..." : "Cheguei ao carregador"}
+                            </Button>
+                          )
                         )}
                         <Button
                           size="sm"

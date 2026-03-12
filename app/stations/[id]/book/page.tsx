@@ -43,6 +43,15 @@ export default function BookStation() {
         if (!cancelled) router.push("/login")
         return
       }
+      if (user.role === "admin") {
+        if (!cancelled) {
+          if (typeof window !== "undefined") {
+            window.alert("Admins não podem fazer reservas. Use uma conta pessoal.")
+          }
+          router.replace("/admin")
+        }
+        return
+      }
       const [data, stationChargers] = await Promise.all([
         getStationWithCounts(stationId),
         getStationChargers(stationId),
@@ -167,6 +176,9 @@ export default function BookStation() {
     )
   }
 
+  const totalChargers = chargers.length
+  const availableChargers = chargers.filter((c) => c.status === "available").length
+
   const estimatedCost = Number.parseInt(duration) * 40 * station.price_per_kwh
 
   return (
@@ -191,7 +203,7 @@ export default function BookStation() {
               <div className="flex justify-between text-sm md:text-base">
                 <span className="text-muted-foreground">Carregadores Disponíveis</span>
                 <span className="font-medium">
-                  {station.available_chargers ?? 0}/{station.total_chargers ?? 0}
+                  {availableChargers}/{totalChargers}
                 </span>
               </div>
               {(station.total_chargers ?? 0) >= 1 && (

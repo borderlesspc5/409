@@ -2,16 +2,28 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { getStationsWithCounts, getBookings } from "@/lib/firestore"
-import type { Station, Booking } from "@/lib/types"
+import dynamic from "next/dynamic"
+import { getStationsWithCounts, getBookings, getUsers } from "@/lib/firestore"
+import type { Station, Booking, User } from "@/lib/types"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MapPin, Zap, Clock, DollarSign, ArrowRight, Activity } from "lucide-react"
+import { CircularIndicator } from "@/components/ui/circular-indicator"
+
+const StationMap = dynamic(() => import("@/components/station-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[320px] items-center justify-center rounded-lg border bg-muted">
+      <p className="text-muted-foreground">Carregando mapa...</p>
+    </div>
+  ),
+})
 
 export default function AdminDashboard() {
   const [stations, setStations] = useState<Station[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
 
   const [periodType, setPeriodType] = useState<"total" | "year" | "month">("total")
@@ -20,11 +32,14 @@ export default function AdminDashboard() {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([getStationsWithCounts(), getBookings()]).then(([s, b]) => {
-      setStations(s)
-      setBookings(b)
-      setLoading(false)
-    })
+    Promise.all([getStationsWithCounts(), getBookings(), getUsers()]).then(
+      ([s, b, u]) => {
+        setStations(s)
+        setBookings(b)
+        setUsers(u)
+        setLoading(false)
+      }
+    )
   }, [])
 
   const bookingsForStation = useMemo(
@@ -198,10 +213,46 @@ export default function AdminDashboard() {
   ).length
 
   const activeStations = filteredStations.filter((s) => s.status === "active").length
+  const clientsCount = useMemo(
+    () => users.filter((u) => u.role === "user").length,
+    [users]
+  )
+
+  const CLIENTS_GOAL = 100
+  const RECHARGES_GOAL = 500
+  const KWH_GOAL = 10000
+
   const maintenanceStations = filteredStations.filter(
     (s) => s.status === "maintenance"
   ).length
   const inactiveStations = filteredStations.filter((s) => s.status === "inactive").length
+
+  const estimatedKwhInPeriod = useMemo(() => {
+    if (filteredBookings.length === 0) return 0
+
+    return filteredBookings.reduce((sum, booking) => {
+      if (typeof booking.total_kwh === "number" && !Number.isNaN(booking.total_kwh)) {
+        return sum + booking.total_kwh
+      }
+
+      const start = new Date(booking.start_time).getTime()
+      const end = new Date(booking.end_time).getTime()
+      if (Number.isNaN(start) || Number.isNaN(end) || end <= start) {
+        return sum
+      }
+
+      const hours = (end - start) / (1000 * 60 * 60)
+      const station = stations.find((s) => s.id === booking.station_id)
+      const powerKw =
+        station?.max_power_kw ??
+        station?.min_power_kw ??
+        40
+
+      if (!powerKw || Number.isNaN(powerKw)) return sum
+
+      return sum + powerKw * hours
+    }, 0)
+  }, [filteredBookings, stations])
 
   if (loading) {
     return (
@@ -219,7 +270,7 @@ export default function AdminDashboard() {
       {/* Cabeçalho + filtros de período */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-3xl font-bold">Dashboard</h2>
+          <h2 className="text-3xl font-bold">Home do Admin</h2>
           <p className="text-muted-foreground">
             Visão geral operacional e financeira das suas estações
           </p>
@@ -339,12 +390,26 @@ export default function AdminDashboard() {
 
       {/* KPIs principais */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+        {/* Receita */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Receita — {summary.label}
-            </CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <CardTitle className="text-sm font-medium">
+                Receita — {summary.label}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Ticket médio{" "}
+                {summary.avgTicket.toLocaleString("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                  minimumFractionDigits: 2,
+                })}
+              </p>
+            </div>
+            <CircularIndicator
+              percentage={Math.min(1, summary.totalRevenue / 100000)}
+              size={40}
+            />
           </CardHeader>
           <CardContent>
             <p className="text-2xl md:text-3xl font-bold">
@@ -354,57 +419,135 @@ export default function AdminDashboard() {
                 minimumFractionDigits: 2,
               })}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Ticket médio:{" "}
-              {summary.avgTicket.toLocaleString("pt-BR", {
-                style: "currency",
-                currency: "BRL",
-                minimumFractionDigits: 2,
-              })}
-            </p>
           </CardContent>
         </Card>
 
+        {/* Clientes cadastrados */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Recargas no período</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <CardTitle className="text-sm font-medium">Clientes cadastrados</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Usuários com conta de cliente
+              </p>
+            </div>
+            <CircularIndicator
+              percentage={clientsCount / CLIENTS_GOAL}
+              size={40}
+            />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl md:text-3xl font-bold">{completedBookingsInPeriod}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {activeBookingsNow} reserva(s) ativa(s) agora
+            <p className="text-2xl md:text-3xl font-bold">{clientsCount}</p>
+          </CardContent>
+        </Card>
+
+        {/* Recargas no período */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="text-sm font-medium">Recargas no período</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                {activeBookingsNow} reserva(s) ativa(s) agora
+              </p>
+            </div>
+            <CircularIndicator
+              percentage={completedBookingsInPeriod / RECHARGES_GOAL}
+              size={40}
+            />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl md:text-3xl font-bold">
+              {completedBookingsInPeriod}
             </p>
           </CardContent>
         </Card>
 
+        {/* kWh estimados no período */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Taxa de ocupação</CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <CardTitle className="text-sm font-medium">kWh estimados</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Energia estimada no período selecionado
+              </p>
+            </div>
+            <CircularIndicator
+              percentage={estimatedKwhInPeriod / KWH_GOAL}
+              size={40}
+            />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl md:text-3xl font-bold">
+              {estimatedKwhInPeriod.toFixed(0)} kWh
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Taxa de ocupação */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="text-sm font-medium">Taxa de ocupação</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                {availableChargers}/{totalChargers} carregadores livres
+              </p>
+            </div>
+            <CircularIndicator
+              percentage={Number(occupancy) / 100}
+              size={40}
+            />
           </CardHeader>
           <CardContent>
             <p className="text-2xl md:text-3xl font-bold">{occupancy}%</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {availableChargers}/{totalChargers} carregadores livres
-            </p>
           </CardContent>
         </Card>
 
+        {/* Estações */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Estações</CardTitle>
+            <div>
+              <CardTitle className="text-sm font-medium">Estações</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                {activeStations} ativas · {maintenanceStations} manutenção ·{" "}
+                {inactiveStations} inativas
+              </p>
+            </div>
             <MapPin className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="text-2xl md:text-3xl font-bold">{filteredStations.length}</p>
-            <p className="text-xs text-muted-foreground">
-              {activeStations} ativas · {maintenanceStations} em manutenção ·{" "}
-              {inactiveStations} inativas
+            <p className="text-2xl md:text-3xl font-bold">
+              {filteredStations.length}
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Mapa de estações */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-muted-foreground" />
+            Distribuição de estações
+          </CardTitle>
+          <CardDescription>
+            Visualize a localização e disponibilidade das estações no sistema
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {stations.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhuma estação cadastrada ainda.
+            </p>
+          ) : (
+            <div className="relative w-full h-[420px] lg:h-[480px] overflow-hidden rounded-lg">
+              <StationMap
+                stations={stations}
+                onStationSelect={(station) => setSelectedStationId(station.id)}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Grid principal: visão operacional + financeiro por estação */}
       <div className="grid gap-6 lg:grid-cols-[2fr,1.4fr] xl:grid-cols-[2.1fr,1.3fr]">

@@ -171,6 +171,8 @@ export interface Voucher {
   max_uses: number
   used_count: number
   one_per_user: boolean
+  /** Quando true, o cupom está em stand-by (pausado) mesmo dentro da janela de validade. */
+  paused?: boolean
   active_from?: string
   active_until?: string
   created_at: string

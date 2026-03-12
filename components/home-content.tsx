@@ -39,6 +39,10 @@ export default function HomeContent() {
         router.push("/login")
         return
       }
+      if (currentUser.role === "admin") {
+        router.replace("/admin")
+        return
+      }
       setUser(currentUser)
       getStationsWithCounts().then(setStations)
     }
@@ -160,11 +164,17 @@ export default function HomeContent() {
                         </span>
                       </div>
 
-                      <Link href={`/stations/${station.id}`}>
-                        <Button size="default" className="mt-3 w-full">
-                          Reservar
-                        </Button>
-                      </Link>
+                      {user?.role === "admin" ? (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          Admins não podem fazer reservas. Use uma conta pessoal.
+                        </p>
+                      ) : (
+                        <Link href={`/stations/${station.id}`}>
+                          <Button size="default" className="mt-3 w-full">
+                            Reservar
+                          </Button>
+                        </Link>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -228,11 +238,17 @@ export default function HomeContent() {
                     </div>
                   )}
 
-<Link href={`/stations/${station.id}`}>
-                        <Button size="default" className="mt-3 w-full">
-                          Ver Detalhes
-                        </Button>
-                      </Link>
+                  {user?.role === "admin" ? (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Admins não podem fazer reservas. Use uma conta pessoal.
+                    </p>
+                  ) : (
+                    <Link href={`/stations/${station.id}`}>
+                      <Button size="default" className="mt-3 w-full">
+                        Ver Detalhes
+                      </Button>
+                    </Link>
+                  )}
                 </CardContent>
               </Card>
             ))}
